@@ -2,18 +2,33 @@
 import streamlit as st
 import pandas as pd
 import joblib
-
-# Load model, encoders, and expected feature list
-model = joblib.load("best_model.pkl")
-encoders = joblib.load("label_encoders.pkl")
-model_features = joblib.load("model_features.pkl")
+import os
 
 st.set_page_config(page_title="Employee Salary Classification", page_icon="💼", layout="centered")
+
 st.title("💼 Employee Salary Classification App")
 st.markdown("Predict whether an employee earns >50K or ≤50K based on input features.")
 st.sidebar.header("Input Employee Details")
 
-# 🧾 Collect all required inputs
+# ✅ Check if required files exist
+if not os.path.exists("best_model.pkl"):
+    st.error("❌ 'best_model.pkl' not found.")
+    st.stop()
+
+if not os.path.exists("label_encoders.pkl"):
+    st.error("❌ 'label_encoders.pkl' not found.")
+    st.stop()
+
+if not os.path.exists("model_features.pkl"):
+    st.error("❌ 'model_features.pkl' not found. Please upload it to your app directory.")
+    st.stop()
+
+# ✅ Load resources
+model = joblib.load("best_model.pkl")
+encoders = joblib.load("label_encoders.pkl")
+model_features = joblib.load("model_features.pkl")
+
+# 🧾 Input fields (must match training)
 age = st.sidebar.slider("Age", 18, 65, 30)
 fnlwgt = st.sidebar.number_input("fnlwgt", min_value=0)
 educational_num = st.sidebar.slider("Education (numeric)", 1, 16, 10)
@@ -28,7 +43,7 @@ hours_per_week = st.sidebar.slider("Hours per week", 1, 80, 40)
 native_country = st.sidebar.selectbox("Country", encoders['native-country'].classes_)
 workclass = st.sidebar.selectbox("Workclass", encoders['workclass'].classes_)
 
-# ✅ Build initial input_df
+# ✅ Build input DataFrame
 input_df = pd.DataFrame({
     'age': [age],
     'workclass': [workclass],
@@ -45,19 +60,22 @@ input_df = pd.DataFrame({
     'native-country': [native_country]
 })
 
-# ⚙️ Encode categorical features
-categorical_cols = encoders.keys()
-for col in categorical_cols:
+# ⚙️ Encode categorical columns
+for col in encoders:
     if col in input_df.columns:
         input_df[col] = input_df[col].replace("?", "Unknown")
-        input_df[col] = encoders[col].transform(input_df[col])
+        try:
+            input_df[col] = encoders[col].transform(input_df[col])
+        except Exception as e:
+            st.error(f"❌ Encoding error for column `{col}`: {e}")
+            st.stop()
 
-# ✅ Ensure input matches training feature list
+# ✅ Align with training features
 for col in model_features:
     if col not in input_df.columns:
-        input_df[col] = 0  # fill any missing columns with 0
+        input_df[col] = 0  # fill missing with 0
 
-input_df = input_df[model_features]  # reorder
+input_df = input_df[model_features]
 
 st.write("### ✅ Final Input to Model")
 st.write(input_df)
