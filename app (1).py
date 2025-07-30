@@ -1,9 +1,8 @@
-
 import streamlit as st
 import pandas as pd
 import joblib
 
-# Load model and encoders
+# Load the trained model and encoders
 model = joblib.load("best_model.pkl")
 encoders = joblib.load("label_encoders.pkl")
 
@@ -14,46 +13,40 @@ st.markdown("Predict whether an employee earns >50K or ≤50K based on input fea
 
 st.sidebar.header("Input Employee Details")
 
+# Inputs
 age = st.sidebar.slider("Age", 18, 65, 30)
-educational_num = st.sidebar.slider("Education Level (numeric)", 1, 16, 10)  # numeric input
-occupation = st.sidebar.selectbox("Job Role", [
-    "Tech-support", "Craft-repair", "Other-service", "Sales",
-    "Exec-managerial", "Prof-specialty", "Handlers-cleaners", "Machine-op-inspct",
-    "Adm-clerical", "Farming-fishing", "Transport-moving", "Priv-house-serv",
-    "Protective-serv", "Armed-Forces"
-])
+educational_num = st.sidebar.slider("Education Level (numeric)", 1, 16, 10)  # Use educational-num
+occupation = st.sidebar.selectbox("Job Role", encoders['occupation'].classes_)
 hours_per_week = st.sidebar.slider("Hours per week", 1, 80, 40)
 experience = st.sidebar.slider("Years of Experience", 0, 40, 5)
 
-# Build raw input DataFrame
+# Build input DataFrame
 input_df = pd.DataFrame({
     'age': [age],
-    'educational-num': [educational_num],  # use numeric value directly
+    'educational-num': [educational_num],
     'occupation': [occupation],
     'hours-per-week': [hours_per_week],
     'experience': [experience]
 })
 
-st.write("### 🔍 Input Data (Before Encoding)")
-st.write(input_df)
-
-# Encode categorical columns
+# Encode categorical features
 categorical_cols = ['occupation']
+
 for col in categorical_cols:
     if col in encoders:
         try:
             input_df[col] = encoders[col].transform(input_df[col])
-        except Exception as e:
-            st.error(f"❌ Error encoding column `{col}`: {e}")
+        except ValueError as e:
+            st.error(f"❌ Invalid input for `{col}`: {e}")
             st.stop()
     else:
-        st.warning(f"⚠️ Encoder for `{col}` not found. Column removed.")
+        st.warning(f"⚠️ Encoder for `{col}` not found. Skipping.")
         input_df.drop(columns=[col], inplace=True)
 
 st.write("### ✅ Final Input to Model")
 st.write(input_df)
 
-# Predict
+# Prediction
 if st.button("Predict Salary Class"):
     try:
         prediction = model.predict(input_df)
@@ -72,13 +65,14 @@ if uploaded_file is not None:
 
     for col in categorical_cols:
         if col in encoders and col in batch_data.columns:
+            batch_data[col] = batch_data[col].replace("?", "Unknown")
             try:
                 batch_data[col] = encoders[col].transform(batch_data[col])
-            except Exception as e:
-                st.error(f"❌ Error encoding `{col}` in batch: {e}")
+            except ValueError as e:
+                st.error(f"❌ Encoding error in column `{col}`: {e}")
                 st.stop()
         elif col in batch_data.columns:
-            st.warning(f"⚠️ Encoder for `{col}` not found. Removing column.")
+            st.warning(f"⚠️ Encoder for `{col}` not found. Dropping column.")
             batch_data.drop(columns=[col], inplace=True)
 
     try:
