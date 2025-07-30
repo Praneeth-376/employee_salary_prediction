@@ -1,87 +1,71 @@
+
 import streamlit as st
 import pandas as pd
 import joblib
 
-# Load the trained model and encoders
+# Load model, encoders, and expected feature list
 model = joblib.load("best_model.pkl")
 encoders = joblib.load("label_encoders.pkl")
+model_features = joblib.load("model_features.pkl")
 
 st.set_page_config(page_title="Employee Salary Classification", page_icon="💼", layout="centered")
-
 st.title("💼 Employee Salary Classification App")
 st.markdown("Predict whether an employee earns >50K or ≤50K based on input features.")
-
 st.sidebar.header("Input Employee Details")
 
-# Inputs
+# 🧾 Collect all required inputs
 age = st.sidebar.slider("Age", 18, 65, 30)
-educational_num = st.sidebar.slider("Education Level (numeric)", 1, 16, 10)  # Use educational-num
-occupation = st.sidebar.selectbox("Job Role", encoders['occupation'].classes_)
+fnlwgt = st.sidebar.number_input("fnlwgt", min_value=0)
+educational_num = st.sidebar.slider("Education (numeric)", 1, 16, 10)
+marital_status = st.sidebar.selectbox("Marital Status", encoders['marital-status'].classes_)
+occupation = st.sidebar.selectbox("Occupation", encoders['occupation'].classes_)
+relationship = st.sidebar.selectbox("Relationship", encoders['relationship'].classes_)
+race = st.sidebar.selectbox("Race", encoders['race'].classes_)
+gender = st.sidebar.selectbox("Gender", encoders['gender'].classes_)
+capital_gain = st.sidebar.number_input("Capital Gain", min_value=0)
+capital_loss = st.sidebar.number_input("Capital Loss", min_value=0)
 hours_per_week = st.sidebar.slider("Hours per week", 1, 80, 40)
-experience = st.sidebar.slider("Years of Experience", 0, 40, 5)
+native_country = st.sidebar.selectbox("Country", encoders['native-country'].classes_)
+workclass = st.sidebar.selectbox("Workclass", encoders['workclass'].classes_)
 
-# Build input DataFrame
+# ✅ Build initial input_df
 input_df = pd.DataFrame({
     'age': [age],
+    'workclass': [workclass],
+    'fnlwgt': [fnlwgt],
     'educational-num': [educational_num],
+    'marital-status': [marital_status],
     'occupation': [occupation],
+    'relationship': [relationship],
+    'race': [race],
+    'gender': [gender],
+    'capital-gain': [capital_gain],
+    'capital-loss': [capital_loss],
     'hours-per-week': [hours_per_week],
-    'experience': [experience]
+    'native-country': [native_country]
 })
 
-# Encode categorical features
-categorical_cols = ['occupation']
-
+# ⚙️ Encode categorical features
+categorical_cols = encoders.keys()
 for col in categorical_cols:
-    if col in encoders:
-        try:
-            input_df[col] = encoders[col].transform(input_df[col])
-        except ValueError as e:
-            st.error(f"❌ Invalid input for `{col}`: {e}")
-            st.stop()
-    else:
-        st.warning(f"⚠️ Encoder for `{col}` not found. Skipping.")
-        input_df.drop(columns=[col], inplace=True)
+    if col in input_df.columns:
+        input_df[col] = input_df[col].replace("?", "Unknown")
+        input_df[col] = encoders[col].transform(input_df[col])
+
+# ✅ Ensure input matches training feature list
+for col in model_features:
+    if col not in input_df.columns:
+        input_df[col] = 0  # fill any missing columns with 0
+
+input_df = input_df[model_features]  # reorder
 
 st.write("### ✅ Final Input to Model")
 st.write(input_df)
 
-# Prediction
+# 🔮 Predict
 if st.button("Predict Salary Class"):
     try:
         prediction = model.predict(input_df)
         st.success(f"✅ Prediction: {prediction[0]}")
     except Exception as e:
         st.error(f"❌ Prediction failed: {e}")
-
-# Batch Prediction
-st.markdown("---")
-st.markdown("#### 📂 Batch Prediction")
-uploaded_file = st.file_uploader("Upload a CSV file for batch prediction", type="csv")
-
-if uploaded_file is not None:
-    batch_data = pd.read_csv(uploaded_file)
-    st.write("Uploaded data preview:", batch_data.head())
-
-    for col in categorical_cols:
-        if col in encoders and col in batch_data.columns:
-            batch_data[col] = batch_data[col].replace("?", "Unknown")
-            try:
-                batch_data[col] = encoders[col].transform(batch_data[col])
-            except ValueError as e:
-                st.error(f"❌ Encoding error in column `{col}`: {e}")
-                st.stop()
-        elif col in batch_data.columns:
-            st.warning(f"⚠️ Encoder for `{col}` not found. Dropping column.")
-            batch_data.drop(columns=[col], inplace=True)
-
-    try:
-        batch_preds = model.predict(batch_data)
-        batch_data['PredictedClass'] = batch_preds
-        st.write("✅ Predictions:")
-        st.write(batch_data.head())
-
-        csv = batch_data.to_csv(index=False).encode('utf-8')
-        st.download_button("Download Predictions CSV", csv, file_name='predicted_classes.csv', mime='text/csv')
-    except Exception as e:
-        st.error(f"❌ Batch prediction failed: {e}")
